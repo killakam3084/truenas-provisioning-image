@@ -1,0 +1,119 @@
+---
+- name: Deploy Nginx Configuration from Git
+  hosts: webservers # <--- REPLACE with the name of your host group from inventory
+  become: yes # Run tasks with sudo/root privileges
+
+  vars:
+    # --- Variables specific to your repository and paths ---
+    repo_url: "https://github.com/killakam3084/truenas-nginx-config.git"
+    repo_dest: "/tmp/truenas_nginx_config_repo" # Temporary location to clone the repo on the target host
+    nginx_config_path: "/etc/nginx"
+    sites_enabled_path: "{{ nginx_config_path }}/sites-enabled"
+    sites_available_path: "{{ nginx_config_path }}/sites-available"
+
+    # List of configuration files in sites-available that should be enabled
+    sites_to_enable:
+      - iillmaticc.link.conf
+      - truenas.iillmaticc.link.conf
+      - qbittorrent.iillmaticc.link.conf
+      - filebrowser.iillmaticc.link.conf
+    # --------------------------------------------------------
+
+  tasks:
+    - name: Ensure Nginx is installed
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: yes # Update apt cache before attempting installation
+
+    - name: Ensure Nginx service is stopped before deploying new config
+      ansible.builtin.service:
+        name: nginx
+        state: stopped
+
+    - name: Clone the Nginx configuration repository
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ repo_dest }}"
+        version: main # Specify the branch you want to clone (e.g., main, master, a specific tag or commit)
+        force: yes # Use with caution: Overwrites the destination if it exists and is not a Git repo. Useful for ensuring a clean clone.
+
+    - name: Ensure necessary Nginx configuration directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755' # Standard directory permissions
+      loop:
+        - "{{ nginx_config_path }}"
+        - "{{ sites_available_path }}"
+        - "{{ sites_enabled_path }}"
+        - "{{ nginx_config_path }}/conf.d" # Ensure conf.d also exists if you use it
+
+    - name: Copy main nginx.conf file
+      ansible.builtin.copy:
+        src: "{{ repo_dest }}/nginx.conf"
+        dest: "{{ nginx_config_path }}/nginx.conf"
+        owner: root
+        group: root
+        mode: '0644' # Standard file permissions
+        remote_src: yes # Tells Ansible that the source path is on the target host (where the repo was cloned)
+
+    - name: Copy sites-available configuration files
+      ansible.builtin.copy:
+        src: "{{ repo_dest }}/sites-available/" # Copy the contents of the sites-available directory
+        dest: "{{ sites_available_path }}/"     # To the sites-available directory on the target
+        owner: root
+        group: root
+        mode: '0644'
+        remote_src: yes
+
+    #- name: Copy conf.d configuration files (if applicable)
+      # Uncomment and adjust if you have files in conf.d/ you need to deploy
+      # ansible.builtin.copy:
+      #   src: "{{ repo_dest }}/conf.d/"
+      #   dest: "{{ nginx_config_path }}/conf.d/"
+      #   owner: root
+      #   group: root
+      #   mode: '0644'
+      #   remote_src: yes
+      #   # Optional: create=yes if conf.d might not exist (though handled by file task above)
+
+    - name: Remove default site symlink (if it exists)
+      ansible.builtin.file:
+        path: "{{ sites_enabled_path }}/default"
+        state: absent # Ensure this file/symlink does not exist
+      ignore_errors: yes # Prevents the playbook from failing if 'default' doesn't exist
+
+    - name: Ensure desired site symlinks are present in sites-enabled
+      ansible.builtin.file:
+        src: "{{ sites_available_path }}/{{ item }}" # Source is the file in sites-available
+        dest: "{{ sites_enabled_path }}/{{ item }}"   # Destination is the symlink in sites-enabled
+        state: link # Ensure it exists as a symbolic link
+        force: yes # Replace existing symlink if it points elsewhere (useful on subsequent runs)
+        owner: root # Symlink ownership is often root
+        group: root # Symlink group is often root
+      loop: "{{ sites_to_enable }}" # Loop through the list of sites defined in vars
+
+    - name: Clean up the cloned repository directory
+      ansible.builtin.file:
+        path: "{{ repo_dest }}"
+        state: absent # Remove the directory and its contents recursively
+
+    - name: Test Nginx configuration syntax
+      ansible.builtin.command: /usr/sbin/nginx -t # Use the full path to nginx for reliability
+      register: nginx_test_result # Capture the output and return code
+      changed_when: nginx_test_result.rc != 0 # This task reports "changed" if the test fails (unexpected)
+      failed_when: nginx_test_result.rc != 0   # This task fails the playbook if the test fails
+
+    - name: Show Nginx configuration test errors (if any)
+      ansible.builtin.debug:
+        var: nginx_test_result.stderr # Display the error output from the test
+      when: nginx_test_result.rc != 0 # Only run this debug task if the test failed
+
+    - name: Reload Nginx service if config test successful
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded # Reload gracefully applies new config without dropping connections
+      when: nginx_test_result.rc == 0 # Only reload if the configuration test passed
