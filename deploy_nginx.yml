@@ -1,11 +1,12 @@
 ---
-- name: Deploy Nginx Configuration from Git
+- name: Deploy Nginx Configuration from Git (using SSH protocol)
   hosts: webservers # <--- REPLACE with the name of your host group from inventory
   become: yes # Run tasks with sudo/root privileges
 
   vars:
-    # --- Variables specific to your repository and paths ---
-    repo_url: "https://github.com/killakam3084/truenas-nginx-config.git"
+    # --- Update repo_url to use the SSH protocol ---
+    repo_url: "git@github.com:killakam3084/truenas-nginx-config.git" # <--- Use the SSH URL format
+    # ---------------------------------------------
     repo_dest: "/tmp/truenas_nginx_config_repo" # Temporary location to clone the repo on the target host
     nginx_config_path: "/etc/nginx"
     sites_enabled_path: "{{ nginx_config_path }}/sites-enabled"
@@ -19,24 +20,43 @@
       - filebrowser.iillmaticc.link.conf
     # --------------------------------------------------------
 
+  # If you previously included a vars_files section for GitHub credentials,
+  # you can remove it now as it's not needed for SSH authentication.
+  # vars_files:
+  #   - vars/secrets.yml
+
   tasks:
+    - name: Ensure Git is installed
+      ansible.builtin.apt:
+        name: git
+        state: present
+        update_cache: yes # Ensure apt cache is updated before installing git
+
     - name: Ensure Nginx is installed
       ansible.builtin.apt:
         name: nginx
         state: present
-        update_cache: yes # Update apt cache before attempting installation
+        update_cache: yes # Ensure apt cache is updated before attempting installation
 
     - name: Ensure Nginx service is stopped before deploying new config
       ansible.builtin.service:
         name: nginx
         state: stopped
 
-    - name: Clone the Nginx configuration repository
+    - name: Clone the Nginx configuration repository (using SSH key)
       ansible.builtin.git:
-        repo: "{{ repo_url }}"
+        repo: "{{ repo_url }}" # This is now the SSH URL, authentication uses SSH keys
         dest: "{{ repo_dest }}"
         version: main # Specify the branch you want to clone (e.g., main, master, a specific tag or commit)
-        force: yes # Use with caution: Overwrites the destination if it exists and is not a Git repo. Useful for ensuring a clean clone.
+        force: yes # Use with caution: Overwrites the destination if it exists and is not a Git repo. Useful for ensuring a fresh clone.
+        # --- REMOVE the http_user and http_password lines ---
+        # http_user: "{{ github_username }}"
+        # http_password: "{{ github_pat }}"
+        # --------------------------------------------------
+
+        # If your SSH key for authenticating to github.com is NOT in the default location (~/.ssh/id_rsa or ~/.ssh/id_ed25519)
+        # for the user Ansible connects as on the TARGET host, you might need to specify it:
+        # ssh_opts: '-i /path/to/your/ssh/key' # Replace with the actual path to the private key on the target host
 
     - name: Ensure necessary Nginx configuration directories exist
       ansible.builtin.file:
@@ -69,16 +89,14 @@
         mode: '0644'
         remote_src: yes
 
-    #- name: Copy conf.d configuration files (if applicable)
-      # Uncomment and adjust if you have files in conf.d/ you need to deploy
-      # ansible.builtin.copy:
-      #   src: "{{ repo_dest }}/conf.d/"
-      #   dest: "{{ nginx_config_path }}/conf.d/"
-      #   owner: root
-      #   group: root
-      #   mode: '0644'
-      #   remote_src: yes
-      #   # Optional: create=yes if conf.d might not exist (though handled by file task above)
+    - name: Copy conf.d configuration files
+      ansible.builtin.copy:
+        src: "{{ repo_dest }}/conf.d/" # Copy the contents of the conf.d directory
+        dest: "{{ nginx_config_path }}/conf.d/" # To the conf.d directory on the target
+        owner: root
+        group: root
+        mode: '0644'
+        remote_src: yes
 
     - name: Remove default site symlink (if it exists)
       ansible.builtin.file:
@@ -116,4 +134,4 @@
       ansible.builtin.service:
         name: nginx
         state: reloaded # Reload gracefully applies new config without dropping connections
-      when: nginx_test_result.rc == 0 # Only reload if the configuration test passed
+      when: nginx_test_result.rc == 0 # Only run if the test passed, to avoid reloading broken config
