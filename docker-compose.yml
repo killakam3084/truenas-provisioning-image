@@ -1,6 +1,5 @@
 services:
   provisioner:
-    build: .
     image: ghcr.io/killakam3084/truenas-provisioning-image:latest
     container_name: provisioner
     restart: unless-stopped
