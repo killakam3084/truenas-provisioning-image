@@ -1,0 +1,16 @@
+services:
+  provisioner:
+    build: .
+    image: ghcr.io/killakam3084/truenas-provisioning-image:latest
+    container_name: provisioner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=git@github.com:killakam3084/truenas.git
+      - REPO_DEST=/mnt/cell_block_d/repos/truenas
+    volumes:
+      # Monorepo + app configs live here
+      - /mnt/cell_block_d:/mnt/cell_block_d
+      # SSH key for git clone auth (read-only)
+      - /root/.ssh:/root/.ssh:ro
+      # Docker socket — allows docker/compose CLI commands against host
+      - /var/run/docker.sock:/var/run/docker.sock
