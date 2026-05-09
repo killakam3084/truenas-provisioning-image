@@ -1,6 +1,11 @@
 #!/bin/sh
 set -e
 
+# Allow git to operate on repos owned by other users (provisioner runs as root,
+# repo may be owned by truenas_admin on the host volume).
+git config --global --add safe.directory "$REPO_DEST"
+git config --global --add safe.directory '*'
+
 # Clone the monorepo if not already present; pull if it is.
 if [ ! -d "$REPO_DEST/.git" ]; then
   echo "[provisioner] Cloning $REPO_URL into $REPO_DEST"
