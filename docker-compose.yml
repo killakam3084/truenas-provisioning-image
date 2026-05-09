@@ -3,6 +3,8 @@ services:
     image: ghcr.io/killakam3084/truenas-provisioning-image:latest
     container_name: provisioner
     network_mode: host
+    extra_hosts:
+      - "infisical.iillmaticc.link:127.0.0.1"
     restart: unless-stopped
     environment:
       - REPO_URL=git@github.com:killakam3084/truenas.git
