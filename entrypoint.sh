@@ -6,6 +6,9 @@ set -u
 git config --global --add safe.directory "$REPO_DEST"
 git config --global --add safe.directory '*'
 
+git config --global user.name "killakam3084"
+git config --global user.email "cameron.rison@gmail.com"
+
 # Clone the monorepo if not already present; otherwise refresh in a fail-safe way.
 if [ ! -d "$REPO_DEST/.git" ]; then
   echo "[provisioner] Cloning $REPO_URL into $REPO_DEST"
