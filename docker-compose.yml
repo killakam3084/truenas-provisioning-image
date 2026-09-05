@@ -9,10 +9,14 @@ services:
     environment:
       - REPO_URL=git@github.com:killakam3084/truenas.git
       - REPO_DEST=/mnt/cell_block_d/repos/truenas
+      - TRUENAS_USER=truenas_admin
+      - TRUENAS_UID=950
+      - TRUENAS_GID=950
+      - HOME=/home/truenas_admin
     volumes:
       # Monorepo + app configs live here
       - /mnt/cell_block_d:/mnt/cell_block_d
       # SSH key for git clone auth (read-only)
-      - /root/.ssh:/root/.ssh:ro
+      - /home/truenas_admin/.ssh:/home/truenas_admin/.ssh:ro
       # Docker socket — allows docker/compose CLI commands against host
       - /var/run/docker.sock:/var/run/docker.sock
