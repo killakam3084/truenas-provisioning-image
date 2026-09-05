@@ -31,6 +31,33 @@ fi
 mkdir -p "$TRUENAS_HOME"
 chown -R "$TRUENAS_UID:$TRUENAS_GID" "$TRUENAS_HOME" 2>/dev/null || true
 
+# Build a writable known_hosts file for git/ssh even when ~/.ssh is mounted read-only.
+SSH_SRC_DIR="$TRUENAS_HOME/.ssh"
+SSH_RUNTIME_DIR="/tmp/provisioner-ssh"
+SSH_KNOWN_HOSTS="$SSH_RUNTIME_DIR/known_hosts"
+
+mkdir -p "$SSH_RUNTIME_DIR"
+chmod 700 "$SSH_RUNTIME_DIR"
+
+if [ -f "$SSH_SRC_DIR/known_hosts" ]; then
+  cp "$SSH_SRC_DIR/known_hosts" "$SSH_KNOWN_HOSTS" 2>/dev/null || true
+fi
+
+touch "$SSH_KNOWN_HOSTS"
+chmod 600 "$SSH_KNOWN_HOSTS"
+chown -R "$TRUENAS_UID:$TRUENAS_GID" "$SSH_RUNTIME_DIR" 2>/dev/null || true
+
+if ! ssh-keygen -F github.com -f "$SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
+  ssh-keyscan -H github.com >> "$SSH_KNOWN_HOSTS" 2>/dev/null || \
+    echo "[provisioner] WARN: unable to seed github.com host key" >&2
+fi
+
+if [ -f "$SSH_SRC_DIR/config" ]; then
+  export GIT_SSH_COMMAND="ssh -F $SSH_SRC_DIR/config -o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
+else
+  export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
+fi
+
 # Allow git to operate on repos owned by other users (provisioner runs as root,
 # repo may be owned by truenas_admin on the host volume).
 run_as_truenas git config --global --add safe.directory "$REPO_DEST"
