@@ -1,6 +1,13 @@
 services:
   provisioner:
-    image: ghcr.io/killakam3084/truenas-provisioning-image:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TRUENAS_USER: ${TRUENAS_USER:-truenas_admin}
+        TRUENAS_UID: ${TRUENAS_UID:-950}
+        TRUENAS_GID: ${TRUENAS_GID:-950}
+    image: truenas-provisioning-image:local
     container_name: provisioner
     network_mode: host
     extra_hosts:
