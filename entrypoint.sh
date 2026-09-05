@@ -52,9 +52,19 @@ if ! ssh-keygen -F github.com -f "$SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
     echo "[provisioner] WARN: unable to seed github.com host key" >&2
 fi
 
-SSH_OPTS="-o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
-if [ -f "$SSH_SRC_DIR/config" ]; then
-  SSH_OPTS="-F $SSH_SRC_DIR/config $SSH_OPTS"
+SSH_KEY=""
+for key in id_ed25519 id_rsa id_ecdsa; do
+  if [ -f "$SSH_SRC_DIR/$key" ]; then
+    SSH_KEY="$SSH_SRC_DIR/$key"
+    break
+  fi
+done
+
+SSH_OPTS="-o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes"
+if [ -n "$SSH_KEY" ]; then
+  SSH_OPTS="$SSH_OPTS -i $SSH_KEY"
+else
+  echo "[provisioner] WARN: no SSH private key found in $SSH_SRC_DIR" >&2
 fi
 
 export GIT_SSH_COMMAND="ssh $SSH_OPTS"
