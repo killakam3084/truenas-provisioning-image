@@ -52,11 +52,13 @@ if ! ssh-keygen -F github.com -f "$SSH_KNOWN_HOSTS" >/dev/null 2>&1; then
     echo "[provisioner] WARN: unable to seed github.com host key" >&2
 fi
 
+SSH_OPTS="-o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
 if [ -f "$SSH_SRC_DIR/config" ]; then
-  export GIT_SSH_COMMAND="ssh -F $SSH_SRC_DIR/config -o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
-else
-  export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o StrictHostKeyChecking=yes"
+  SSH_OPTS="-F $SSH_SRC_DIR/config $SSH_OPTS"
 fi
+
+export GIT_SSH_COMMAND="ssh $SSH_OPTS"
+run_as_truenas git config --global core.sshCommand "ssh $SSH_OPTS"
 
 # Allow git to operate on repos owned by other users (provisioner runs as root,
 # repo may be owned by truenas_admin on the host volume).
